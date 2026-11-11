@@ -1,0 +1,12 @@
+  C++11及以后新增的容器：
+  1. std::tuple - 元组（不同类型的固定大小集合）
+  2. std::pair - 对偶（两个值的组合）
+  3. std::bitset - 位集合
+  4. std::valarray - 值数组（用于数值计算）
+
+  容器适配器：
+
+  C++20/23新增：
+  1. std::span - 数组视图
+  2. std::mdspan - 多维数组视图（C++23）
+  3. std::flat_map、std::flat_set - 扁平化关联容器（C++23）

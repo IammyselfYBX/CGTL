@@ -1,0 +1,11 @@
+.ccls
+.ccls-cache/*
+bin/*
+test/env/*
+lib/*
+test/*
+example/*
+makefile.test
+
+.agents/
+scripts/
