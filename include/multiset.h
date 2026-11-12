@@ -17,6 +17,28 @@ typedef JOIN(set, T) MULTISET;
 typedef JOIN(JOIN(set, T), node) MULTISETNODE;
 typedef JOIN(JOIN(set, T), it) MULTISETIT;
 
+#define CGTL_ALGO_PREFIX JOIN(MULTISET, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
+
+static inline cgtl_iter
+JOIN(MULTISET, iter_begin)(MULTISET* self)
+{
+    return JOIN(JOIN(set, T), iter_begin)(self);
+}
+
+static inline cgtl_iter
+JOIN(MULTISET, iter_end)(MULTISET* self)
+{
+    return JOIN(JOIN(set, T), iter_end)(self);
+}
+
+static inline cgtl_range
+JOIN(MULTISET, iter_range)(MULTISET* self)
+{
+    return JOIN(JOIN(set, T), iter_range)(self);
+}
+
 static inline MULTISET
 JOIN(MULTISET, init)(int _compare(T*, T*))
 {

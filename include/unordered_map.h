@@ -7,6 +7,7 @@
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 
 #define UPAIR JOIN(JOIN(upair, K), V)
 #define UMAP JOIN(JOIN(umap, K), V)
@@ -63,12 +64,36 @@ JOIN(UPAIR, deep_free)(UPAIR* self)
 
 #define T UPAIR
 #define HOLD
-#include "unorder_set.h"
+#include "unordered_set.h"
 #undef T
 
 typedef JOIN(ust, UPAIR) UMAP;
 typedef JOIN(JOIN(ust, UPAIR), node) UMAPNODE;
 typedef JOIN(JOIN(ust, UPAIR), it) UMAPIT;
+
+#define T UPAIR
+#define CGTL_ALGO_PREFIX JOIN(UMAP, algo)
+#include "algorithm.h"
+#undef T
+#undef CGTL_ALGO_PREFIX
+
+static inline cgtl_iter
+JOIN(UMAP, iter_begin)(UMAP* self)
+{
+    return JOIN(JOIN(ust, UPAIR), iter_begin)(self);
+}
+
+static inline cgtl_iter
+JOIN(UMAP, iter_end)(UMAP* self)
+{
+    return JOIN(JOIN(ust, UPAIR), iter_end)(self);
+}
+
+static inline cgtl_range
+JOIN(UMAP, iter_range)(UMAP* self)
+{
+    return JOIN(JOIN(ust, UPAIR), iter_range)(self);
+}
 
 static inline UMAP
 JOIN(UMAP, init)(size_t _hash(K*), int _equal(K*, K*))

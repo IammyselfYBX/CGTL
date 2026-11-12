@@ -28,6 +28,7 @@ $(BINDIR):
 # Test targets
 .PHONY: all test clean help
 .PHONY: test_vector test_list test_deque test_queue test_stack test_pri_queue test_set test_unorder_set
+.PHONY: test_iterator_algorithm
 .PHONY: test_map test_unordered_map test_multiset test_multimap test_unordered_multiset test_unordered_multimap test_array test_forward_list test_cstring
 .PHONY: run_tests run_valgrind
 
@@ -42,33 +43,33 @@ help:
 	@echo "  test_<name>  - Build and run specific test (vector, list, deque, etc.)"
 	@echo "  Available containers: vector, list, deque, queue, stack, pri_queue, set, unorder_set"
 	@echo "                       map, unordered_map, multiset, multimap, unordered_multiset"
-	@echo "                       unordered_multimap, array, forward_list, cstring"
+	@echo "                       unordered_multimap, array, forward_list, cstring, iterator_algorithm"
 	@echo "  clean        - Remove all generated files"
 	@echo "  help         - Show this help message"
 
 # Main test target
-test: $(BINDIR) test_vector test_list test_deque test_queue test_stack test_pri_queue test_set test_unorder_set test_map test_unordered_map test_multiset test_multimap test_unordered_multiset test_unordered_multimap test_array test_forward_list test_cstring
+test: $(BINDIR) test_vector test_list test_deque test_queue test_stack test_pri_queue test_set test_unorder_set test_map test_unordered_map test_multiset test_multimap test_unordered_multiset test_unordered_multimap test_array test_forward_list test_cstring test_iterator_algorithm
 
 # Run tests without valgrind (build all tests first)
-run_tests: $(BINDIR)/test_vector $(BINDIR)/test_list $(BINDIR)/test_deque $(BINDIR)/test_queue $(BINDIR)/test_stack $(BINDIR)/test_pri_queue $(BINDIR)/test_set $(BINDIR)/test_unorder_set $(BINDIR)/test_map $(BINDIR)/test_unordered_map $(BINDIR)/test_multiset $(BINDIR)/test_multimap $(BINDIR)/test_unordered_multiset $(BINDIR)/test_unordered_multimap $(BINDIR)/test_array $(BINDIR)/test_forward_list $(BINDIR)/test_cstring
+run_tests: $(BINDIR)/test_vector $(BINDIR)/test_list $(BINDIR)/test_deque $(BINDIR)/test_queue $(BINDIR)/test_stack $(BINDIR)/test_pri_queue $(BINDIR)/test_set $(BINDIR)/test_unorder_set $(BINDIR)/test_map $(BINDIR)/test_unordered_map $(BINDIR)/test_multiset $(BINDIR)/test_multimap $(BINDIR)/test_unordered_multiset $(BINDIR)/test_unordered_multimap $(BINDIR)/test_array $(BINDIR)/test_forward_list $(BINDIR)/test_cstring $(BINDIR)/test_iterator_algorithm
 	@echo "Running all tests without memory checking..."
-	@for test in vector list deque queue stack pri_queue set unorder_set map unordered_map multiset multimap unordered_multiset unordered_multimap array forward_list cstring; do \
+	@status=0; for test in vector list deque queue stack pri_queue set unorder_set map unordered_map multiset multimap unordered_multiset unordered_multimap array forward_list cstring iterator_algorithm; do \
 		echo "=== Running test_$$test ==="; \
-		LD_LIBRARY_PATH=./lib/cmocka/lib:$$LD_LIBRARY_PATH $(BINDIR)/test_$$test || echo "FAILED: test_$$test"; \
+		LD_LIBRARY_PATH=./lib/cmocka/lib:$$LD_LIBRARY_PATH $(BINDIR)/test_$$test || { echo "FAILED: test_$$test"; status=1; }; \
 		echo; \
-	done
+	done; exit $$status
 
 # Run tests with valgrind (build all tests first)  
-run_valgrind: $(BINDIR)/test_vector $(BINDIR)/test_list $(BINDIR)/test_deque $(BINDIR)/test_queue $(BINDIR)/test_stack $(BINDIR)/test_pri_queue $(BINDIR)/test_set $(BINDIR)/test_unorder_set $(BINDIR)/test_map $(BINDIR)/test_unordered_map $(BINDIR)/test_multiset $(BINDIR)/test_multimap $(BINDIR)/test_unordered_multiset $(BINDIR)/test_unordered_multimap $(BINDIR)/test_array $(BINDIR)/test_forward_list $(BINDIR)/test_cstring
+run_valgrind: $(BINDIR)/test_vector $(BINDIR)/test_list $(BINDIR)/test_deque $(BINDIR)/test_queue $(BINDIR)/test_stack $(BINDIR)/test_pri_queue $(BINDIR)/test_set $(BINDIR)/test_unorder_set $(BINDIR)/test_map $(BINDIR)/test_unordered_map $(BINDIR)/test_multiset $(BINDIR)/test_multimap $(BINDIR)/test_unordered_multiset $(BINDIR)/test_unordered_multimap $(BINDIR)/test_array $(BINDIR)/test_forward_list $(BINDIR)/test_cstring $(BINDIR)/test_iterator_algorithm
 	@echo "Running all tests with valgrind memory checking..."
-	@for test in vector list deque queue stack pri_queue set unorder_set map unordered_map multiset multimap unordered_multiset unordered_multimap array forward_list cstring; do \
+	@status=0; for test in vector list deque queue stack pri_queue set unorder_set map unordered_map multiset multimap unordered_multiset unordered_multimap array forward_list cstring iterator_algorithm; do \
 		echo "=== Running test_$$test with valgrind ==="; \
 		LD_LIBRARY_PATH=./lib/cmocka/lib:$$LD_LIBRARY_PATH \
 		valgrind --tool=memcheck --leak-check=yes --show-reachable=yes \
 			--num-callers=20 --track-fds=yes --track-origins=yes \
-			$(BINDIR)/test_$$test || echo "FAILED: test_$$test"; \
+			$(BINDIR)/test_$$test || { echo "FAILED: test_$$test"; status=1; }; \
 		echo; \
-	done
+	done; exit $$status
 
 # Individual test targets
 test_vector: $(BINDIR)/test_vector
@@ -190,6 +191,13 @@ test_cstring: $(BINDIR)/test_cstring
 		--num-callers=20 --track-fds=yes --track-origins=yes \
 		$(BINDIR)/test_cstring
 
+test_iterator_algorithm: $(BINDIR)/test_iterator_algorithm
+	@echo "=== Testing Iterator/Algorithm ==="
+	LD_LIBRARY_PATH=./lib/cmocka/lib:$$LD_LIBRARY_PATH \
+	valgrind --tool=memcheck --leak-check=yes --show-reachable=yes \
+		--num-callers=20 --track-fds=yes --track-origins=yes \
+		$(BINDIR)/test_iterator_algorithm
+
 # Test binary compilation rules
 $(BINDIR)/test_vector: $(TESTDIR)/test_vector.c $(TESTDIR)/test_helpers.c | $(BINDIR)
 	$(CC) $(TEST_CFLAGS) -o $@ $^ $(TEST_LDFLAGS) -lm
@@ -240,6 +248,9 @@ $(BINDIR)/test_forward_list: $(TESTDIR)/test_forward_list.c $(TESTDIR)/test_help
 	$(CC) $(TEST_CFLAGS) -o $@ $^ $(TEST_LDFLAGS)
 
 $(BINDIR)/test_cstring: $(TESTDIR)/test_cstring.c $(TESTDIR)/test_helpers.c | $(BINDIR)
+	$(CC) $(TEST_CFLAGS) -o $@ $^ $(TEST_LDFLAGS)
+
+$(BINDIR)/test_iterator_algorithm: $(TESTDIR)/test_iterator_algorithm.c $(TESTDIR)/test_helpers.c | $(BINDIR)
 	$(CC) $(TEST_CFLAGS) -o $@ $^ $(TEST_LDFLAGS)
 
 # Clean target

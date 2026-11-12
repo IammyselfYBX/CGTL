@@ -1,12 +1,17 @@
 #ifndef T
-#error "Template type T undefined for <unorder_set.h>"
+#error "Template type T undefined for <unordered_set.h>"
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 
 #define HASH JOIN(ust, T)
 #define HASHNODE JOIN(HASH, node)
 #define HASHIT JOIN(HASH, it)
+
+#define CGTL_ALGO_PREFIX JOIN(HASH, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 typedef struct HASHNODE
 {
@@ -140,6 +145,92 @@ JOIN(HASHIT, each)(HASH* a)
     return JOIN(HASH, empty)(a)
          ? JOIN(HASHIT, range)(a, NULL, NULL)
          : JOIN(HASHIT, range)(a, JOIN(HASH, begin)(a), JOIN(HASH, end)(a));
+}
+
+static inline void
+JOIN(HASHIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    HASH* container = (HASH*)it->container;
+    HASHNODE* node = (HASHNODE*)it->cur;
+
+    if(node && node->next)
+    {
+        node = node->next;
+        it->cur = node;
+        it->ref = &node->key;
+        return;
+    }
+
+    for(size_t i = it->index + 1; i < container->bucket_count; i++)
+    {
+        node = container->bucket[i];
+        if(node)
+        {
+            it->index = i;
+            it->cur = node;
+            it->ref = &node->key;
+            return;
+        }
+    }
+    it->done = 1;
+}
+
+static inline int
+JOIN(HASHIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->container == b->container && a->cur == b->cur;
+}
+
+static const cgtl_iter_ops JOIN(HASHIT, base_ops) = {
+    JOIN(HASHIT, base_step),
+    JOIN(HASHIT, base_equal),
+    NULL,
+    NULL
+};
+
+static inline cgtl_iter
+JOIN(HASH, iter_end)(HASH* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.index = self->bucket_count;
+    it.index_end = self->bucket_count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(HASHIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(HASH, iter_begin)(HASH* self)
+{
+    if(JOIN(HASH, empty)(self))
+        return JOIN(HASH, iter_end)(self);
+
+    HASHNODE* node = JOIN(HASH, begin)(self);
+    cgtl_iter it = {0};
+    it.cur = node;
+    it.ref = &node->key;
+    it.container = self;
+    it.index = JOIN(HASHIT, index)(self, node->key);
+    it.index_end = self->bucket_count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(HASHIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(HASH, iter_range)(HASH* self)
+{
+    cgtl_range range;
+    range.first = JOIN(HASH, iter_begin)(self);
+    range.last = JOIN(HASH, iter_end)(self);
+    return range;
 }
 
 static inline HASHNODE*

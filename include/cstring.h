@@ -2,7 +2,9 @@
 #define __CGTL_STRING_H__
 
 #include "cgtl.h"
+#include "iterator.h"
 #include <stddef.h>
+#include <string.h>
 
 #define STRING_NPOS ((size_t)-1)
 #define STRING_DEFAULT_CAPACITY 16
@@ -360,6 +362,100 @@ static inline int string_less_than_cstr(const string* str, const char* cstr) {
 
 static inline int string_less_than_string(const string* str1, const string* str2) {
     return string_compare_string(str1, str2) < 0;
+}
+
+static inline void
+string_iter_step(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    char* cur = (char*)it->cur;
+    char* end = (char*)it->end_ref;
+
+    if(cur == end)
+    {
+        it->done = 1;
+        return;
+    }
+
+    cur++;
+    it->cur = cur;
+    it->ref = cur;
+    if(cur == end)
+        it->done = 1;
+}
+
+static inline int
+string_iter_equal(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->cur == b->cur;
+}
+
+static inline ptrdiff_t
+string_iter_distance(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(!a->cur || !b->cur)
+        return 0;
+    return (char*)b->cur - (char*)a->cur;
+}
+
+static inline cgtl_iter
+string_iter_at(const cgtl_iter* a, ptrdiff_t n)
+{
+    cgtl_iter out = *a;
+    char* cur = (char*)a->cur + n;
+    out.cur = cur;
+    out.ref = cur;
+    out.done = (cur >= (char*)a->end_ref);
+    return out;
+}
+
+static const cgtl_iter_ops string_iter_ops = {
+    string_iter_step,
+    string_iter_equal,
+    string_iter_distance,
+    string_iter_at
+};
+
+static inline cgtl_iter
+string_iter_end(string* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.cur = self->data + self->size;
+    it.end_ref = it.cur;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &string_iter_ops;
+    return it;
+}
+
+static inline cgtl_iter
+string_iter_begin(string* self)
+{
+    if(self->size == 0)
+        return string_iter_end(self);
+
+    cgtl_iter it = {0};
+    it.ref = self->data;
+    it.cur = self->data;
+    it.end_ref = self->data + self->size;
+    it.container = self;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &string_iter_ops;
+    return it;
+}
+
+static inline cgtl_range
+string_iter_range(string* self)
+{
+    cgtl_range range;
+    range.first = string_iter_begin(self);
+    range.last = string_iter_end(self);
+    return range;
 }
 
 #endif

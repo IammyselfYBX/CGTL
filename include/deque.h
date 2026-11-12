@@ -2,10 +2,14 @@
 #error "Template type T undefined for <deque.h>"
 #endif
 #include "cgtl.h"
+#include "iterator.h"
 
 #define DEQ JOIN(deq, T)
 #define DEQBUCKET JOIN(DEQ, bucket)
 #define DEQIT JOIN(DEQ, it)
+#define CGTL_ALGO_PREFIX JOIN(DEQ, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 #define DEQ_BUCKET_SIZE (512)
 
@@ -141,21 +145,121 @@ JOIN(DEQIT, each)(DEQ* a)
          : JOIN(DEQIT, range)(a, JOIN(DEQ, begin)(a), JOIN(DEQ, end)(a));
 }
 
+static inline void
+JOIN(DEQIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    size_t next = it->index + 1;
+    if(next >= it->index_end)
+    {
+        it->done = 1;
+        return;
+    }
+
+    it->index = next;
+    it->ref = JOIN(DEQ, at)((DEQ*)it->container, next);
+}
+
+static inline int
+JOIN(DEQIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->container == b->container && a->index == b->index;
+}
+
+static inline ptrdiff_t
+JOIN(DEQIT, base_distance)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    return (ptrdiff_t)b->index - (ptrdiff_t)a->index;
+}
+
+static inline cgtl_iter
+JOIN(DEQIT, base_at)(const cgtl_iter* a, ptrdiff_t n)
+{
+    cgtl_iter out = *a;
+    size_t index = a->index + (size_t)n;
+    out.index = index;
+    out.ref = JOIN(DEQ, at)((DEQ*)a->container, index);
+    out.done = (index >= a->index_end);
+    return out;
+}
+
+static const cgtl_iter_ops JOIN(DEQIT, base_ops) = {
+    JOIN(DEQIT, base_step),
+    JOIN(DEQIT, base_equal),
+    JOIN(DEQIT, base_distance),
+    JOIN(DEQIT, base_at)
+};
+
+static inline cgtl_iter
+JOIN(DEQ, iter_end)(DEQ* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.index = self->size;
+    it.index_end = self->size;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(DEQIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(DEQ, iter_begin)(DEQ* self)
+{
+    if(JOIN(DEQ, empty)(self))
+        return JOIN(DEQ, iter_end)(self);
+
+    cgtl_iter it = {0};
+    it.ref = JOIN(DEQ, at)(self, 0);
+    it.cur = it.ref;
+    it.container = self;
+    it.index = 0;
+    it.index_end = self->size;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(DEQIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(DEQ, iter_range)(DEQ* self)
+{
+    cgtl_range range;
+    range.first = JOIN(DEQ, iter_begin)(self);
+    range.last = JOIN(DEQ, iter_end)(self);
+    return range;
+}
+
+static inline void
+JOIN(DEQ, push_back)(DEQ* self, T value);
+
+static inline void
+JOIN(DEQ, iter_out_put)(cgtl_out_iter* out, const void* value)
+{
+    JOIN(DEQ, push_back)((DEQ*)out->target, *(T*)value);
+}
+
+static const cgtl_out_iter_ops JOIN(DEQ, iter_out_ops) = {
+    JOIN(DEQ, iter_out_put)
+};
+
+static inline cgtl_out_iter
+JOIN(DEQ, back_inserter)(DEQ* self)
+{
+    cgtl_out_iter out = { self, &JOIN(DEQ, iter_out_ops) };
+    return out;
+}
+
 static inline int
 JOIN(DEQ, equal)(DEQ* self, DEQ* other, int _equal(T*, T*))
 {
-    if(self->size != other->size)
-        return 0;
-    DEQIT a = JOIN(DEQIT, each)(self);
-    DEQIT b = JOIN(DEQIT, each)(other);
-    while(!a.done && !b.done)
-    {
-        if(!_equal(a.ref, b.ref))
-            return 0;
-        a.step(&a);
-        b.step(&b);
-    }
-    return 1;
+    return JOIN(JOIN(DEQ, algo), equal)(
+        JOIN(DEQ, iter_range)(self),
+        JOIN(DEQ, iter_range)(other),
+        _equal);
 }
 
 static inline void
@@ -351,6 +455,35 @@ JOIN(DEQ, insert)(DEQ* self, size_t index, T value)
 }
 
 static inline void
+JOIN(DEQ, insert_range)(DEQ* self, size_t index, const T* values, size_t count)
+{
+    if(!self || (!values && count > 0))
+        return;
+
+    if(index > self->size)
+        index = self->size;
+
+    for(size_t i = 0; i < count; i++)
+        JOIN(DEQ, insert)(self, index + i, values[i]);
+}
+
+static inline size_t
+JOIN(DEQ, erase_range)(DEQ* self, size_t first, size_t last)
+{
+    if(!self || first >= last || first >= self->size)
+        return 0;
+
+    if(last > self->size)
+        last = self->size;
+
+    size_t removed = last - first;
+    for(size_t i = 0; i < removed; i++)
+        JOIN(DEQ, erase)(self, first);
+
+    return removed;
+}
+
+static inline void
 JOIN(DEQ, resize)(DEQ* self, size_t size, T value)
 {
     if(size < self->size){
@@ -456,59 +589,48 @@ JOIN(DEQ, deep_copy)(DEQ* self)
 static inline void
 JOIN(DEQ, ranged_sort)(DEQ* self, size_t a, size_t b, int _compare(T*, T*))
 {
+    if(self->size == 0 || a > b || b >= self->size)
+        return;
 
-    if(a >= b) return;
-
-    size_t mid = a + (b - a) / 2;
-    SWAP(T, JOIN(DEQ, at)(self, a), JOIN(DEQ, at)(self, mid));
-
-    size_t z = a;
-
-    for (size_t i = a + 1; i <= b; i++) {
-
-        if (_compare(JOIN(DEQ, at)(self, i), JOIN(DEQ, at)(self, a)) < 0) {
-            z++;
-            SWAP(T, JOIN(DEQ, at)(self, z), JOIN(DEQ, at)(self, i));
-        }
-    }
-
-    SWAP(T, JOIN(DEQ, at)(self, a), JOIN(DEQ, at)(self, z));
-
-    if (z > a) {
-        JOIN(DEQ, ranged_sort)(self, a, z - 1, _compare);
-    }
-
-    JOIN(DEQ, ranged_sort)(self, z + 1, b, _compare);
+    cgtl_range range = JOIN(DEQ, iter_range)(self);
+    cgtl_iter first = cgtl_iter_at(&range.first, (ptrdiff_t)a);
+    cgtl_iter last = cgtl_iter_at(&range.first, (ptrdiff_t)(b + 1));
+    cgtl_range sub = { first, last };
+    JOIN(JOIN(DEQ, algo), legacy_sort)(sub, _compare, 0);
 }
 
 static inline void
 JOIN(DEQ, sort)(DEQ* self, int _compare(T*, T*))
 {
-    JOIN(DEQ, ranged_sort)(self, 0, self->size - 1, _compare);
+    JOIN(JOIN(DEQ, algo), legacy_sort)(
+        JOIN(DEQ, iter_range)(self), _compare, 0);
 }
 
 static inline size_t
 JOIN(DEQ, remove_if)(DEQ* self, int _match(T*))
 {
-    size_t erases = 0;
-    foreach(DEQ, self, it)
-        if(_match(it.ref))
-        {
-            JOIN(DEQ, erase)(self, it.index);
-            it.index_next = it.index;
-            it.index_last -= 1;
-            erases += 1;
-        }
-    return erases;
+    size_t removed = 0;
+
+    for(;;)
+    {
+        cgtl_range range = JOIN(DEQ, iter_range)(self);
+        cgtl_iter found = JOIN(JOIN(DEQ, algo), find_if)(range, _match);
+        if(cgtl_iter_is_end(&found))
+            break;
+
+        size_t index = found.index;
+        JOIN(DEQ, erase)(self, index);
+        removed++;
+    }
+    return removed;
 }
 
 static inline T*
 JOIN(DEQ, find)(DEQ* self, T key, int _equal(T*, T*))
 {
-    foreach(DEQ, self, it)
-        if(_equal(it.ref, &key))
-            return it.ref;
-    return NULL;
+    cgtl_iter it = JOIN(JOIN(DEQ, algo), find)(
+        JOIN(DEQ, iter_range)(self), key, _equal);
+    return cgtl_iter_is_end(&it) ? NULL : (T*)it.ref;
 }
 
 #undef T

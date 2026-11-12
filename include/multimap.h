@@ -29,6 +29,30 @@ typedef JOIN(set, PAIR) MULTIMAP;
 typedef JOIN(JOIN(set, PAIR), node) MULTIMAPNODE;
 typedef JOIN(JOIN(set, PAIR), it) MULTIMAPIT;
 
+#define T PAIR
+#define CGTL_ALGO_PREFIX JOIN(MULTIMAP, algo)
+#include "algorithm.h"
+#undef T
+#undef CGTL_ALGO_PREFIX
+
+static inline cgtl_iter
+JOIN(MULTIMAP, iter_begin)(MULTIMAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_begin)(self);
+}
+
+static inline cgtl_iter
+JOIN(MULTIMAP, iter_end)(MULTIMAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_end)(self);
+}
+
+static inline cgtl_range
+JOIN(MULTIMAP, iter_range)(MULTIMAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_range)(self);
+}
+
 static inline int
 JOIN(PAIR, compare_key)(PAIR* a, PAIR* b)
 {

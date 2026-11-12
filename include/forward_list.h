@@ -2,10 +2,14 @@
 #error "Template type T undefined for <forward_list.h>"
 #endif
 #include "cgtl.h"
+#include "iterator.h"
 
 #define FLST JOIN(flst, T)
 #define FLSTNODE JOIN(FLST, node)
 #define FLSTIT JOIN(FLST, it)
+#define CGTL_ALGO_PREFIX JOIN(FLST, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 typedef struct FLSTNODE
 {
@@ -46,6 +50,13 @@ JOIN(FLST, begin)(FLST* self)
 
 static inline FLSTNODE*
 JOIN(FLST, end)(FLST* self)
+{
+    (void) self;
+    return NULL;
+}
+
+static inline FLSTNODE*
+JOIN(FLST, before_begin)(FLST* self)
 {
     (void) self;
     return NULL;
@@ -96,6 +107,96 @@ JOIN(FLSTIT, each)(FLST* a)
     return JOIN(FLST, empty)(a)
          ? JOIN(FLSTIT, range)(a, NULL, NULL)
          : JOIN(FLSTIT, range)(a, JOIN(FLST, begin)(a), JOIN(FLST, end)(a));
+}
+
+static inline void
+JOIN(FLSTIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    FLSTNODE* node = (FLSTNODE*)it->cur;
+    FLSTNODE* end = (FLSTNODE*)it->end_ref;
+
+    if(!node || node->next == end)
+    {
+        it->done = 1;
+        return;
+    }
+
+    node = node->next;
+    it->cur = node;
+    it->ref = &node->value;
+}
+
+static inline int
+JOIN(FLSTIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->cur == b->cur;
+}
+
+static const cgtl_iter_ops JOIN(FLSTIT, base_ops) = {
+    JOIN(FLSTIT, base_step),
+    JOIN(FLSTIT, base_equal),
+    NULL,
+    NULL
+};
+
+static inline cgtl_iter
+JOIN(FLST, iter_end)(FLST* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(FLSTIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(FLST, iter_begin)(FLST* self)
+{
+    if(JOIN(FLST, empty)(self))
+        return JOIN(FLST, iter_end)(self);
+
+    cgtl_iter it = {0};
+    it.cur = JOIN(FLST, begin)(self);
+    it.ref = JOIN(FLST, front)(self);
+    it.container = self;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(FLSTIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(FLST, iter_range)(FLST* self)
+{
+    cgtl_range range;
+    range.first = JOIN(FLST, iter_begin)(self);
+    range.last = JOIN(FLST, iter_end)(self);
+    return range;
+}
+
+static inline void
+JOIN(FLST, push_front)(FLST* self, T value);
+
+static inline void
+JOIN(FLST, iter_out_put)(cgtl_out_iter* out, const void* value)
+{
+    JOIN(FLST, push_front)((FLST*)out->target, *(T*)value);
+}
+
+static const cgtl_out_iter_ops JOIN(FLST, iter_out_ops) = {
+    JOIN(FLST, iter_out_put)
+};
+
+static inline cgtl_out_iter
+JOIN(FLST, front_inserter)(FLST* self)
+{
+    cgtl_out_iter out = { self, &JOIN(FLST, iter_out_ops) };
+    return out;
 }
 
 static inline FLST
@@ -269,10 +370,9 @@ JOIN(FLST, remove_if)(FLST* self, int _match(T*))
 static inline FLSTNODE*
 JOIN(FLST, find)(FLST* self, T value, int _equal(T*, T*))
 {
-    foreach(FLST, self, it)
-        if(_equal(it.ref, &value))
-            return it.node;
-    return NULL;
+    cgtl_iter it = JOIN(JOIN(FLST, algo), find)(
+        JOIN(FLST, iter_range)(self), value, _equal);
+    return cgtl_iter_is_end(&it) ? NULL : (FLSTNODE*)it.cur;
 }
 
 static inline void

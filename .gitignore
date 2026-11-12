@@ -9,3 +9,5 @@ makefile.test
 
 .agents/
 scripts/
+.DS_Store
+._*

@@ -28,6 +28,30 @@ typedef JOIN(set, PAIR) MAP;
 typedef JOIN(JOIN(set, PAIR), node) MAPNODE;
 typedef JOIN(JOIN(set, PAIR), it) MAPIT;
 
+#define T PAIR
+#define CGTL_ALGO_PREFIX JOIN(MAP, algo)
+#include "algorithm.h"
+#undef T
+#undef CGTL_ALGO_PREFIX
+
+static inline cgtl_iter
+JOIN(MAP, iter_begin)(MAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_begin)(self);
+}
+
+static inline cgtl_iter
+JOIN(MAP, iter_end)(MAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_end)(self);
+}
+
+static inline cgtl_range
+JOIN(MAP, iter_range)(MAP* self)
+{
+    return JOIN(JOIN(set, PAIR), iter_range)(self);
+}
+
 static inline int
 JOIN(PAIR, compare_key)(PAIR* a, PAIR* b)
 {
@@ -139,6 +163,30 @@ JOIN(MAP, upper_bound)(MAP* self, K key)
     PAIR temp;
     temp.first = key;
     return JOIN(JOIN(set, PAIR), upper_bound)(self, temp);
+}
+
+static inline void
+JOIN(MAP, equal_range)(MAP* self, K key, MAPNODE** begin, MAPNODE** end)
+{
+    if(begin)
+        *begin = NULL;
+    if(end)
+        *end = NULL;
+    if(!self || !begin || !end)
+        return;
+
+    MAPNODE* first = JOIN(MAP, find)(self, key);
+    if(first)
+    {
+        *begin = first;
+        *end = JOIN(JOIN(JOIN(set, PAIR), node), next)(first);
+    }
+    else
+    {
+        MAPNODE* lower = JOIN(MAP, lower_bound)(self, key);
+        *begin = lower;
+        *end = lower;
+    }
 }
 
 static inline void

@@ -7,11 +7,18 @@
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 #include <string.h>
 
 #define UMMAP JOIN(JOIN(ummap, K), V)
 #define UMMAPNODE JOIN(UMMAP, node)
 #define UMMAPIT JOIN(UMMAP, it)
+
+#define T K
+#define CGTL_ALGO_PREFIX JOIN(UMMAP, algo)
+#include "algorithm.h"
+#undef T
+#undef CGTL_ALGO_PREFIX
 
 typedef struct UMMAPNODE
 {
@@ -151,6 +158,92 @@ JOIN(UMMAPIT, each)(UMMAP* a)
     return JOIN(UMMAP, empty)(a)
          ? JOIN(UMMAPIT, range)(a, NULL, NULL)
          : JOIN(UMMAPIT, range)(a, JOIN(UMMAP, begin)(a), JOIN(UMMAP, end)(a));
+}
+
+static inline void
+JOIN(UMMAPIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    UMMAP* container = (UMMAP*)it->container;
+    UMMAPNODE* node = (UMMAPNODE*)it->cur;
+
+    if(node && node->next)
+    {
+        node = node->next;
+        it->cur = node;
+        it->ref = &node->key;
+        return;
+    }
+
+    for(size_t i = it->index + 1; i < container->bucket_count; i++)
+    {
+        node = container->bucket[i];
+        if(node)
+        {
+            it->index = i;
+            it->cur = node;
+            it->ref = &node->key;
+            return;
+        }
+    }
+    it->done = 1;
+}
+
+static inline int
+JOIN(UMMAPIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->container == b->container && a->cur == b->cur;
+}
+
+static const cgtl_iter_ops JOIN(UMMAPIT, base_ops) = {
+    JOIN(UMMAPIT, base_step),
+    JOIN(UMMAPIT, base_equal),
+    NULL,
+    NULL
+};
+
+static inline cgtl_iter
+JOIN(UMMAP, iter_end)(UMMAP* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.index = self->bucket_count;
+    it.index_end = self->bucket_count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(UMMAPIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(UMMAP, iter_begin)(UMMAP* self)
+{
+    if(JOIN(UMMAP, empty)(self))
+        return JOIN(UMMAP, iter_end)(self);
+
+    UMMAPNODE* node = JOIN(UMMAP, begin)(self);
+    cgtl_iter it = {0};
+    it.cur = node;
+    it.ref = &node->key;
+    it.container = self;
+    it.index = JOIN(UMMAPIT, index)(self, node->key);
+    it.index_end = self->bucket_count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(UMMAPIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(UMMAP, iter_range)(UMMAP* self)
+{
+    cgtl_range range;
+    range.first = JOIN(UMMAP, iter_begin)(self);
+    range.last = JOIN(UMMAP, iter_end)(self);
+    return range;
 }
 
 static inline size_t

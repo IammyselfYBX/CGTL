@@ -7,9 +7,13 @@
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 
 #define ARRAY JOIN(JOIN(array, T), N)
 #define ARRAYIT JOIN(ARRAY, it)
+#define CGTL_ALGO_PREFIX JOIN(ARRAY, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 typedef struct ARRAY {
     T data[N];
@@ -142,6 +146,100 @@ JOIN(ARRAYIT, each)(ARRAY* self)
          : JOIN(ARRAYIT, range)(self, JOIN(ARRAY, begin)(self), JOIN(ARRAY, end)(self));
 }
 
+static inline void
+JOIN(ARRAYIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    T* cur = (T*)it->cur;
+    T* end = (T*)it->end_ref;
+
+    if(cur == end)
+    {
+        it->done = 1;
+        return;
+    }
+
+    cur++;
+    it->cur = cur;
+    it->ref = cur;
+    if(cur == end)
+        it->done = 1;
+}
+
+static inline int
+JOIN(ARRAYIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->cur == b->cur;
+}
+
+static inline ptrdiff_t
+JOIN(ARRAYIT, base_distance)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(!a->cur || !b->cur)
+        return 0;
+    return (T*)b->cur - (T*)a->cur;
+}
+
+static inline cgtl_iter
+JOIN(ARRAYIT, base_at)(const cgtl_iter* a, ptrdiff_t n)
+{
+    cgtl_iter out = *a;
+    T* cur = (T*)a->cur + n;
+    out.cur = cur;
+    out.ref = cur;
+    out.done = (cur >= (T*)a->end_ref);
+    return out;
+}
+
+static const cgtl_iter_ops JOIN(ARRAYIT, base_ops) = {
+    JOIN(ARRAYIT, base_step),
+    JOIN(ARRAYIT, base_equal),
+    JOIN(ARRAYIT, base_distance),
+    JOIN(ARRAYIT, base_at)
+};
+
+static inline cgtl_iter
+JOIN(ARRAY, iter_end)(ARRAY* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.cur = (N == 0) ? NULL : (void*)JOIN(ARRAY, end)(self);
+    it.end_ref = it.cur;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(ARRAYIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(ARRAY, iter_begin)(ARRAY* self)
+{
+    if(N == 0)
+        return JOIN(ARRAY, iter_end)(self);
+
+    cgtl_iter it = {0};
+    it.ref = JOIN(ARRAY, begin)(self);
+    it.cur = it.ref;
+    it.end_ref = JOIN(ARRAY, end)(self);
+    it.container = self;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(ARRAYIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(ARRAY, iter_range)(ARRAY* self)
+{
+    cgtl_range range;
+    range.first = JOIN(ARRAY, iter_begin)(self);
+    range.last = JOIN(ARRAY, iter_end)(self);
+    return range;
+}
+
 static inline ARRAY
 JOIN(ARRAY, init)(void)
 {
@@ -204,35 +302,25 @@ JOIN(ARRAY, shallow_free)(ARRAY* self)
 static inline int
 JOIN(ARRAY, equal)(ARRAY* self, ARRAY* other, int _equal(T*, T*))
 {
-    for(size_t i = 0; i < N; i++)
-    {
-        if(!_equal(&self->data[i], &other->data[i]))
-            return 0;
-    }
-    return 1;
+    return JOIN(JOIN(ARRAY, algo), equal)(
+        JOIN(ARRAY, iter_range)(self),
+        JOIN(ARRAY, iter_range)(other),
+        _equal);
 }
 
 static inline T*
 JOIN(ARRAY, find)(ARRAY* self, T value, int _equal(T*, T*))
 {
-    for(size_t i = 0; i < N; i++)
-    {
-        if(_equal(&self->data[i], &value))
-            return &self->data[i];
-    }
-    return NULL;
+    cgtl_iter it = JOIN(JOIN(ARRAY, algo), find)(
+        JOIN(ARRAY, iter_range)(self), value, _equal);
+    return cgtl_iter_is_end(&it) ? NULL : (T*)it.ref;
 }
 
 static inline size_t
 JOIN(ARRAY, count)(ARRAY* self, T value, int _equal(T*, T*))
 {
-    size_t count = 0;
-    for(size_t i = 0; i < N; i++)
-    {
-        if(_equal(&self->data[i], &value))
-            count++;
-    }
-    return count;
+    return JOIN(JOIN(ARRAY, algo), count)(
+        JOIN(ARRAY, iter_range)(self), value, _equal);
 }
 
 static inline ARRAY
@@ -279,24 +367,28 @@ static inline size_t
 JOIN(ARRAY, remove_if)(ARRAY* self, int _match(T*), T default_value)
 {
     size_t removed = 0;
-    for(size_t i = 0; i < N; i++)
+    cgtl_range range = JOIN(ARRAY, iter_range)(self);
+    cgtl_iter cursor = range.first;
+
+    while(!cgtl_iter_is_end(&cursor))
     {
-        if(_match(&self->data[i]))
-        {
-            if (self->free)
-                self->free(&self->data[i]);
+        cgtl_range sub = { cursor, range.last };
+        cgtl_iter found = JOIN(JOIN(ARRAY, algo), find_if)(sub, _match);
+        if(cgtl_iter_is_end(&found))
+            break;
 
-            if(self->copy) {
+        T* value = (T*)found.ref;
+        if(self->free)
+            self->free(value);
+        if(self->copy)
+            *value = self->copy(&default_value);
+        else
+            *value = default_value;
+        removed++;
 
-                self->data[i] = self->copy(&default_value);
-            } else {
-
-                self->data[i] = default_value;
-            }
-            removed++;
-        }
+        cursor = found;
+        cgtl_iter_step(&cursor);
     }
-
     return removed;
 }
 

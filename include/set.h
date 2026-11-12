@@ -2,10 +2,14 @@
 #error "Template type T undefined for <set.h>"
 #endif
 #include "cgtl.h"
+#include "iterator.h"
 
 #define SET JOIN(set, T)
 #define RBT JOIN(SET, node)
 #define SETIT JOIN(SET, it)
+#define CGTL_ALGO_PREFIX JOIN(SET, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 typedef struct RBT
 {
@@ -130,21 +134,83 @@ JOIN(SETIT, each)(SET* a)
          : JOIN(SETIT, range)(a, JOIN(SET, begin)(a), JOIN(SET, end)(a));
 }
 
+static inline void
+JOIN(SETIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    RBT* node = (RBT*)it->cur;
+    RBT* next = node ? JOIN(RBT, next)(node) : NULL;
+
+    if(!next)
+    {
+        it->done = 1;
+        return;
+    }
+
+    it->cur = next;
+    it->ref = &next->key;
+}
+
+static inline int
+JOIN(SETIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->cur == b->cur;
+}
+
+static const cgtl_iter_ops JOIN(SETIT, base_ops) = {
+    JOIN(SETIT, base_step),
+    JOIN(SETIT, base_equal),
+    NULL,
+    NULL
+};
+
+static inline cgtl_iter
+JOIN(SET, iter_end)(SET* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.category = CGTL_ITER_BIDIRECTIONAL;
+    it.ops = &JOIN(SETIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(SET, iter_begin)(SET* self)
+{
+    if(JOIN(SET, empty)(self))
+        return JOIN(SET, iter_end)(self);
+
+    cgtl_iter it = {0};
+    RBT* node = JOIN(RBT, min)(self->root);
+    it.cur = node;
+    it.ref = &node->key;
+    it.container = self;
+    it.category = CGTL_ITER_BIDIRECTIONAL;
+    it.ops = &JOIN(SETIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(SET, iter_range)(SET* self)
+{
+    cgtl_range range;
+    range.first = JOIN(SET, iter_begin)(self);
+    range.last = JOIN(SET, iter_end)(self);
+    return range;
+}
+
 static inline int
 JOIN(SET, equal)(SET* self, SET* other, int _equal(T*, T*))
 {
-    if(self->size != other->size)
-        return 0;
-    SETIT a = JOIN(SETIT, each)(self);
-    SETIT b = JOIN(SETIT, each)(other);
-    while(!a.done && !b.done)
-    {
-        if(!_equal(a.ref, b.ref))
-            return 0;
-        a.step(&a);
-        b.step(&b);
-    }
-    return 1;
+    return JOIN(JOIN(SET, algo), equal)(
+        JOIN(SET, iter_range)(self),
+        JOIN(SET, iter_range)(other),
+        _equal);
 }
 
 static inline void
@@ -735,18 +801,38 @@ JOIN(SET, remove_if)(SET* self, int _match(T*))
     return erases;
 }
 
+static inline void
+JOIN(SET, iter_out_put)(cgtl_out_iter* out, const void* value)
+{
+    SET* self = (SET*)out->target;
+    T copied = self->copy ? self->copy((T*)value) : *(T*)value;
+    JOIN(SET, insert)(self, copied);
+}
+
+static const cgtl_out_iter_ops JOIN(SET, iter_out_ops) = {
+    JOIN(SET, iter_out_put)
+};
+
+static inline cgtl_out_iter
+JOIN(SET, inserter)(SET* self)
+{
+    cgtl_out_iter out = { self, &JOIN(SET, iter_out_ops) };
+    return out;
+}
+
 static inline SET
 JOIN(SET, intersection)(SET* a, SET* b)
 {
     SET self = JOIN(SET, init)(a->compare);
-    foreach(SET, a, i)
-        if(JOIN(SET, find)(b, *i.ref)){
-            if(self.copy){
-                JOIN(SET, insert)(&self, self.copy(i.ref));
-            }else{
-                JOIN(SET, insert)(&self, *i.ref);
-            }
-        }
+    self.copy = a->copy;
+    self.free = a->free;
+
+    cgtl_out_iter out = JOIN(SET, inserter)(&self);
+    JOIN(JOIN(SET, algo), set_intersection)(
+        JOIN(SET, iter_range)(a),
+        JOIN(SET, iter_range)(b),
+        &out,
+        a->compare);
     return self;
 }
 
@@ -755,36 +841,46 @@ JOIN(SET, union)(SET* a, SET* b)
 {
     SET self = JOIN(SET, init)(a->compare);
     self.copy = a->copy;
-    foreach(SET, a, i)
-        if(self.copy)
-            JOIN(SET, insert)(&self, self.copy(i.ref));
-        else
-            JOIN(SET, insert)(&self, *i.ref);
-    foreach(SET, b, i)
-        if(self.copy)
-            JOIN(SET, insert)(&self, self.copy(i.ref));
-        else
-            JOIN(SET, insert)(&self, *i.ref);
+    self.free = a->free;
+
+    cgtl_out_iter out = JOIN(SET, inserter)(&self);
+    JOIN(JOIN(SET, algo), set_union)(
+        JOIN(SET, iter_range)(a),
+        JOIN(SET, iter_range)(b),
+        &out,
+        a->compare);
     return self;
 }
 
 static inline SET
 JOIN(SET, difference)(SET* a, SET* b)
 {
-    SET self = JOIN(SET, deep_copy)(a);
-    foreach(SET, b, i)
-        JOIN(SET, erase)(&self, *i.ref);
+    SET self = JOIN(SET, init)(a->compare);
+    self.copy = a->copy;
+    self.free = a->free;
+
+    cgtl_out_iter out = JOIN(SET, inserter)(&self);
+    JOIN(JOIN(SET, algo), set_difference)(
+        JOIN(SET, iter_range)(a),
+        JOIN(SET, iter_range)(b),
+        &out,
+        a->compare);
     return self;
 }
 
 static inline SET
 JOIN(SET, symmetric_difference)(SET* a, SET* b)
 {
-    SET self = JOIN(SET, union)(a, b);
-    SET intersection = JOIN(SET, intersection)(a, b);
-    foreach(SET, &intersection, i)
-        JOIN(SET, erase)(&self, *i.ref);
-    JOIN(SET, free)(&intersection);
+    SET self = JOIN(SET, init)(a->compare);
+    self.copy = a->copy;
+    self.free = a->free;
+
+    cgtl_out_iter out = JOIN(SET, inserter)(&self);
+    JOIN(JOIN(SET, algo), set_symmetric_difference)(
+        JOIN(SET, iter_range)(a),
+        JOIN(SET, iter_range)(b),
+        &out,
+        a->compare);
     return self;
 }
 

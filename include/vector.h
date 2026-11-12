@@ -3,6 +3,7 @@
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 #define MUST_ALIGN_16(T) (sizeof(T) == sizeof(char))
 
 #define VEC JOIN(vec, T)
@@ -19,6 +20,9 @@ typedef struct VEC
 } VEC;
 
 #define VECIT JOIN(VEC, it)
+#define CGTL_ALGO_PREFIX JOIN(VEC, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 typedef struct VECIT
 {
     T*   ref;
@@ -102,19 +106,127 @@ JOIN(VECIT, each)(VEC* a)
          : JOIN(VECIT, range)(a, JOIN(VEC, begin)(a), JOIN(VEC, end)(a));
 }
 
+static inline void
+JOIN(VECIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    T* cur = (T*)it->cur;
+    T* end = (T*)it->end_ref;
+
+    if(cur == end)
+    {
+        it->done = 1;
+        return;
+    }
+
+    cur++;
+    it->cur = cur;
+    it->ref = cur;
+    if(cur == end)
+        it->done = 1;
+}
+
+static inline int
+JOIN(VECIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->cur == b->cur;
+}
+
+static inline ptrdiff_t
+JOIN(VECIT, base_distance)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(!a->cur || !b->cur)
+        return 0;
+    return (T*)b->cur - (T*)a->cur;
+}
+
+static inline cgtl_iter
+JOIN(VECIT, base_at)(const cgtl_iter* a, ptrdiff_t n)
+{
+    cgtl_iter out = *a;
+    T* cur = (T*)a->cur + n;
+    out.cur = cur;
+    out.ref = cur;
+    out.done = (cur >= (T*)a->end_ref);
+    return out;
+}
+
+static const cgtl_iter_ops JOIN(VECIT, base_ops) = {
+    JOIN(VECIT, base_step),
+    JOIN(VECIT, base_equal),
+    JOIN(VECIT, base_distance),
+    JOIN(VECIT, base_at)
+};
+
+static inline cgtl_iter
+JOIN(VEC, iter_end)(VEC* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.cur = JOIN(VEC, empty)(self) ? NULL : (void*)JOIN(VEC, end)(self);
+    it.end_ref = it.cur;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(VECIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(VEC, iter_begin)(VEC* self)
+{
+    if(JOIN(VEC, empty)(self))
+        return JOIN(VEC, iter_end)(self);
+
+    cgtl_iter it = {0};
+    it.ref = JOIN(VEC, begin)(self);
+    it.cur = it.ref;
+    it.end_ref = JOIN(VEC, end)(self);
+    it.container = self;
+    it.category = CGTL_ITER_RANDOM_ACCESS;
+    it.ops = &JOIN(VECIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(VEC, iter_range)(VEC* self)
+{
+    cgtl_range range;
+    range.first = JOIN(VEC, iter_begin)(self);
+    range.last = JOIN(VEC, iter_end)(self);
+    return range;
+}
+
+static inline void
+JOIN(VEC, push_back)(VEC* self, T value);
+
+static inline void
+JOIN(VEC, iter_out_put)(cgtl_out_iter* out, const void* value)
+{
+    JOIN(VEC, push_back)((VEC*)out->target, *(T*)value);
+}
+
+static const cgtl_out_iter_ops JOIN(VEC, iter_out_ops) = {
+    JOIN(VEC, iter_out_put)
+};
+
+static inline cgtl_out_iter
+JOIN(VEC, back_inserter)(VEC* self)
+{
+    cgtl_out_iter out = { self, &JOIN(VEC, iter_out_ops) };
+    return out;
+}
+
 static inline int
 JOIN(VEC, equal)(VEC* self, VEC* other, int _equal(T*, T*))
 {
-    if(self->size != other->size){return 0;}
-    VECIT a = JOIN(VECIT, each)(self);
-    VECIT b = JOIN(VECIT, each)(other);
-    while(!a.done && !b.done)
-    {
-        if(!_equal(a.ref, b.ref)){return 0;}
-        a.step(&a);
-        b.step(&b);
-    }
-    return 1;
+    return JOIN(JOIN(VEC, algo), equal)(
+        JOIN(VEC, iter_range)(self),
+        JOIN(VEC, iter_range)(other),
+        _equal);
 }
 
 static inline void
@@ -220,9 +332,10 @@ JOIN(VEC, reserve)(VEC* self, const size_t capacity)
         }else{
             if(capacity > self->capacity)
                 actual = capacity;
-            if(actual > 0)
-                JOIN(VEC, fit)(self, actual);
         }
+
+        if(actual > 0)
+            JOIN(VEC, fit)(self, actual);
     }
 }
 
@@ -322,68 +435,79 @@ JOIN(VEC, erase)(VEC* self, size_t index)
 }
 
 static inline void
+JOIN(VEC, insert_range)(VEC* self, size_t index, const T* values, size_t count)
+{
+    if(!self || (!values && count > 0))
+        return;
+
+    if(index > self->size)
+        index = self->size;
+
+    for(size_t i = 0; i < count; i++)
+        JOIN(VEC, insert)(self, index + i, values[i]);
+}
+
+static inline size_t
+JOIN(VEC, erase_range)(VEC* self, size_t first, size_t last)
+{
+    if(!self || first >= last || first >= self->size)
+        return 0;
+
+    if(last > self->size)
+        last = self->size;
+
+    size_t removed = last - first;
+    for(size_t i = 0; i < removed; i++)
+        JOIN(VEC, erase)(self, first);
+
+    return removed;
+}
+
+static inline void
 JOIN(VEC, ranged_sort)(VEC* self, int64_t a, int64_t b, int _compare(T*, T*))
 {
-
-    if(a >= b || self->size == 0 || a < 0 || b >= (int64_t)self->size){
+    if(a > b || a < 0 || b < 0 || (size_t)b >= self->size)
         return;
-    }
 
-    int64_t mid = a + (b - a) / 2;
-
-    SWAP(T, &self->value[a], &self->value[mid]);
-
-    int64_t z = a;
-
-    for (int64_t i = a + 1; i <= b; i++) {
-
-        if (_compare(&self->value[i], &self->value[a]) <= 0) {
-            z++;
-            SWAP(T, &self->value[z], &self->value[i]);
-        }
-    }
-
-    SWAP(T, &self->value[a], &self->value[z]);
-
-    JOIN(VEC, ranged_sort)(self, a, z - 1, _compare);
-
-    JOIN(VEC, ranged_sort)(self, z + 1, b, _compare);
+    cgtl_range range = JOIN(VEC, iter_range)(self);
+    cgtl_iter first = cgtl_iter_at(&range.first, (ptrdiff_t)a);
+    cgtl_iter last = cgtl_iter_at(&range.first, (ptrdiff_t)(b + 1));
+    cgtl_range sub = { first, last };
+    JOIN(JOIN(VEC, algo), legacy_sort)(sub, _compare, 1);
 }
 
 static inline void
 JOIN(VEC, sort)(VEC* self, int _compare(T*, T*))
 {
-
-    if(self->size <= 1) {
-        return;
-    }
-
-    JOIN(VEC, ranged_sort)(self, 0, (int64_t)(self->size - 1), _compare);
+    JOIN(JOIN(VEC, algo), legacy_sort)(
+        JOIN(VEC, iter_range)(self), _compare, 1);
 }
 
 static inline size_t
 JOIN(VEC, remove_if)(VEC* self, int _match(T*))
 {
-    size_t erases = 0;
-    foreach(VEC, self, it){
-        if(_match(it.ref)){
-            size_t index = it.ref - JOIN(VEC, begin)(self);
-            JOIN(VEC, erase)(self, index);
-            it.end = JOIN(VEC, end)(self);
-            it.next = it.ref;
-            erases += 1;
-        }
+    size_t removed = 0;
+
+    for(;;)
+    {
+        cgtl_range range = JOIN(VEC, iter_range)(self);
+        cgtl_iter found = JOIN(JOIN(VEC, algo), find_if)(range, _match);
+        if(cgtl_iter_is_end(&found))
+            break;
+
+        size_t index = (size_t)((T*)found.ref - self->value);
+        JOIN(VEC, erase)(self, index);
+        removed++;
     }
-    return erases;
+    return removed;
 }
 
 static inline T*
 JOIN(VEC, find)(VEC* self, T key, int _equal(T*, T*))
 {
-    foreach(VEC, self, it)
-        if(_equal(it.ref, &key))
-            return it.ref;
-    return NULL;
+    cgtl_iter it = JOIN(JOIN(VEC, algo), find)(
+        JOIN(VEC, iter_range)(self), key, _equal);
+    return cgtl_iter_is_end(&it) ? NULL : (T*)it.ref;
 }
 
 static inline VEC

@@ -3,10 +3,15 @@
 #endif
 
 #include "cgtl.h"
+#include "iterator.h"
 
 #define UMSET JOIN(umst, T)
 #define UMSETNODE JOIN(UMSET, node)
 #define UMSETIT JOIN(UMSET, it)
+
+#define CGTL_ALGO_PREFIX JOIN(UMSET, algo)
+#include "algorithm.h"
+#undef CGTL_ALGO_PREFIX
 
 typedef struct UMSETNODE
 {
@@ -154,6 +159,103 @@ JOIN(UMSETIT, each)(UMSET* a)
     return JOIN(UMSET, empty)(a)
          ? JOIN(UMSETIT, range)(a, NULL, NULL)
          : JOIN(UMSETIT, range)(a, JOIN(UMSET, begin)(a), JOIN(UMSET, end)(a));
+}
+
+static inline void
+JOIN(UMSETIT, base_step)(cgtl_iter* it)
+{
+    if(it->done)
+        return;
+
+    if(it->repeat > 1)
+    {
+        it->repeat--;
+        return;
+    }
+
+    UMSET* container = (UMSET*)it->container;
+    UMSETNODE* node = (UMSETNODE*)it->cur;
+
+    if(node && node->next)
+    {
+        node = node->next;
+        it->cur = node;
+        it->ref = &node->key;
+        it->repeat = node->count;
+        return;
+    }
+
+    for(size_t i = it->index + 1; i < container->bucket_count; i++)
+    {
+        node = container->bucket[i];
+        if(node)
+        {
+            it->index = i;
+            it->cur = node;
+            it->ref = &node->key;
+            it->repeat = node->count;
+            return;
+        }
+    }
+    it->done = 1;
+}
+
+static inline int
+JOIN(UMSETIT, base_equal)(const cgtl_iter* a, const cgtl_iter* b)
+{
+    if(a->done || b->done)
+        return a->done && b->done;
+    return a->container == b->container
+        && a->cur == b->cur
+        && a->repeat == b->repeat;
+}
+
+static const cgtl_iter_ops JOIN(UMSETIT, base_ops) = {
+    JOIN(UMSETIT, base_step),
+    JOIN(UMSETIT, base_equal),
+    NULL,
+    NULL
+};
+
+static inline cgtl_iter
+JOIN(UMSET, iter_end)(UMSET* self)
+{
+    cgtl_iter it = {0};
+    it.done = 1;
+    it.container = self;
+    it.index = self->bucket_count;
+    it.index_end = self->bucket_count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(UMSETIT, base_ops);
+    return it;
+}
+
+static inline cgtl_iter
+JOIN(UMSET, iter_begin)(UMSET* self)
+{
+    if(JOIN(UMSET, empty)(self))
+        return JOIN(UMSET, iter_end)(self);
+
+    UMSETNODE* node = JOIN(UMSET, begin)(self);
+    cgtl_iter it = {0};
+    it.cur = node;
+    it.ref = &node->key;
+    it.container = self;
+    it.index = JOIN(UMSETIT, index)(self, node->key);
+    it.index_end = self->bucket_count;
+    it.repeat = node->count;
+    it.category = CGTL_ITER_FORWARD;
+    it.ops = &JOIN(UMSETIT, base_ops);
+    return it;
+}
+
+static inline cgtl_range
+JOIN(UMSET, iter_range)(UMSET* self)
+{
+    cgtl_range range;
+    range.first = JOIN(UMSET, iter_begin)(self);
+    range.last = JOIN(UMSET, iter_end)(self);
+    return range;
 }
 
 static inline T
@@ -361,10 +463,17 @@ JOIN(UMSET, free_node)(UMSET* self, UMSETNODE* n)
 static inline void
 JOIN(UMSET, clear)(UMSET* self)
 {
-    foreach(UMSET, self, it)
-        JOIN(UMSET, free_node)(self, it.node);
     for(size_t i = 0; i < self->bucket_count; i++)
+    {
+        UMSETNODE* node = self->bucket[i];
+        while(node)
+        {
+            UMSETNODE* next = node->next;
+            JOIN(UMSET, free_node)(self, node);
+            node = next;
+        }
         self->bucket[i] = NULL;
+    }
 }
 
 static inline void
