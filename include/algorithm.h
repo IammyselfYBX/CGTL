@@ -587,6 +587,31 @@ JOIN(ALG, set_symmetric_difference)(cgtl_range lhs, cgtl_range rhs,
     return out;
 }
 
+static inline int
+JOIN(ALG, includes)(cgtl_range lhs, cgtl_range rhs, int (*cmp)(T*, T*))
+{
+    cgtl_iter a = lhs.first;
+    cgtl_iter b = rhs.first;
+
+    while(!cgtl_iter_equal(&b, &rhs.last))
+    {
+        if(cgtl_iter_equal(&a, &lhs.last))
+            return 0;
+
+        int order = cmp((T*)a.ref, (T*)b.ref);
+        if(order < 0)
+            cgtl_iter_step(&a);
+        else if(order == 0)
+        {
+            cgtl_iter_step(&a);
+            cgtl_iter_step(&b);
+        }
+        else
+            return 0;
+    }
+    return 1;
+}
+
 static inline cgtl_iter
 JOIN(ALG, lower_bound)(cgtl_range range, T value, int (*cmp)(T*, T*))
 {
@@ -651,6 +676,20 @@ static inline T*
 JOIN(ALG, data)(cgtl_range range)
 {
     return range.first.ref;
+}
+
+static inline T
+JOIN(ALG, accumulate)(cgtl_range range, T init, T (*op)(T*, T*))
+{
+    if(!op)
+        return init;
+
+    for(cgtl_iter it = range.first;
+        !cgtl_iter_equal(&it, &range.last);
+        cgtl_iter_step(&it))
+        init = op(&init, (T*)it.ref);
+
+    return init;
 }
 
 #ifdef U

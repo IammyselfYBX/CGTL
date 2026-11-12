@@ -166,6 +166,30 @@ JOIN(MAP, upper_bound)(MAP* self, K key)
 }
 
 static inline void
+JOIN(MAP, equal_range)(MAP* self, K key, MAPNODE** begin, MAPNODE** end)
+{
+    if(begin)
+        *begin = NULL;
+    if(end)
+        *end = NULL;
+    if(!self || !begin || !end)
+        return;
+
+    MAPNODE* first = JOIN(MAP, find)(self, key);
+    if(first)
+    {
+        *begin = first;
+        *end = JOIN(JOIN(JOIN(set, PAIR), node), next)(first);
+    }
+    else
+    {
+        MAPNODE* lower = JOIN(MAP, lower_bound)(self, key);
+        *begin = lower;
+        *end = lower;
+    }
+}
+
+static inline void
 JOIN(MAP, clear)(MAP* self)
 {
     JOIN(JOIN(set, PAIR), clear)(self);

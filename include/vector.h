@@ -435,6 +435,35 @@ JOIN(VEC, erase)(VEC* self, size_t index)
 }
 
 static inline void
+JOIN(VEC, insert_range)(VEC* self, size_t index, const T* values, size_t count)
+{
+    if(!self || (!values && count > 0))
+        return;
+
+    if(index > self->size)
+        index = self->size;
+
+    for(size_t i = 0; i < count; i++)
+        JOIN(VEC, insert)(self, index + i, values[i]);
+}
+
+static inline size_t
+JOIN(VEC, erase_range)(VEC* self, size_t first, size_t last)
+{
+    if(!self || first >= last || first >= self->size)
+        return 0;
+
+    if(last > self->size)
+        last = self->size;
+
+    size_t removed = last - first;
+    for(size_t i = 0; i < removed; i++)
+        JOIN(VEC, erase)(self, first);
+
+    return removed;
+}
+
+static inline void
 JOIN(VEC, ranged_sort)(VEC* self, int64_t a, int64_t b, int _compare(T*, T*))
 {
     if(a > b || a < 0 || b < 0 || (size_t)b >= self->size)

@@ -1,5 +1,7 @@
 # CGTL (C Generic Template Library)
 
+[中文](README.md) | [English](README-en.md)
+
 CGTL 是一个参考 C++ STL 设计的 C 语言容器与算法库。
 
 当前实现包含：
@@ -189,7 +191,8 @@ int main(void)
 - 最值：`min_element`、`max_element`
 - 反转与排序：`reverse`、`sort`、`is_sorted`
 - 有序查找：`lower_bound`、`upper_bound`、`binary_search`
-- 集合运算：`set_union`、`set_intersection`、`set_difference`、`set_symmetric_difference`
+- 集合运算：`set_union`、`set_intersection`、`set_difference`、`set_symmetric_difference`、`includes`
+- 数值计算：`accumulate`（C 版本通过二元操作回调实现）
 - 输出迭代器版本：`copy_to`、`transform_to`
 
 ### 跨类型算法

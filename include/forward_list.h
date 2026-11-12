@@ -55,6 +55,13 @@ JOIN(FLST, end)(FLST* self)
     return NULL;
 }
 
+static inline FLSTNODE*
+JOIN(FLST, before_begin)(FLST* self)
+{
+    (void) self;
+    return NULL;
+}
+
 static inline void
 JOIN(FLSTIT, step)(FLSTIT* self)
 {

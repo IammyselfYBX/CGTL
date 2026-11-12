@@ -334,6 +334,60 @@ JOIN(LST, insert)(LST* self, LSTNODE* position, T value)
 }
 
 static inline void
+JOIN(LST, insert_range)(LST* self, LSTNODE* position, const T* values, size_t count)
+{
+    if(!self || (!values && count > 0))
+        return;
+
+    for(size_t i = 0; i < count; i++)
+    {
+        if(position)
+            JOIN(LST, insert)(self, position, values[i]);
+        else
+            JOIN(LST, push_back)(self, values[i]);
+    }
+}
+
+static inline size_t
+JOIN(LST, erase_range)(LST* self, LSTNODE* first, LSTNODE* last)
+{
+    if(!self || first == last)
+        return 0;
+
+    size_t removed = 0;
+    LSTNODE* node = first;
+    while(node && node != last)
+    {
+        LSTNODE* next = node->next;
+        JOIN(LST, erase)(self, node);
+        node = next;
+        removed += 1;
+    }
+    return removed;
+}
+
+static inline size_t
+JOIN(LST, remove)(LST* self, T value, int _equal(T*, T*))
+{
+    if(!self || !_equal)
+        return 0;
+
+    size_t removed = 0;
+    LSTNODE* node = self->head;
+    while(node)
+    {
+        LSTNODE* next = node->next;
+        if(_equal(&node->value, &value))
+        {
+            JOIN(LST, erase)(self, node);
+            removed += 1;
+        }
+        node = next;
+    }
+    return removed;
+}
+
+static inline void
 JOIN(LST, clear)(LST* self)
 {
     while(!JOIN(LST, empty)(self))

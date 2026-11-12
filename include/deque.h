@@ -455,6 +455,35 @@ JOIN(DEQ, insert)(DEQ* self, size_t index, T value)
 }
 
 static inline void
+JOIN(DEQ, insert_range)(DEQ* self, size_t index, const T* values, size_t count)
+{
+    if(!self || (!values && count > 0))
+        return;
+
+    if(index > self->size)
+        index = self->size;
+
+    for(size_t i = 0; i < count; i++)
+        JOIN(DEQ, insert)(self, index + i, values[i]);
+}
+
+static inline size_t
+JOIN(DEQ, erase_range)(DEQ* self, size_t first, size_t last)
+{
+    if(!self || first >= last || first >= self->size)
+        return 0;
+
+    if(last > self->size)
+        last = self->size;
+
+    size_t removed = last - first;
+    for(size_t i = 0; i < removed; i++)
+        JOIN(DEQ, erase)(self, first);
+
+    return removed;
+}
+
+static inline void
 JOIN(DEQ, resize)(DEQ* self, size_t size, T value)
 {
     if(size < self->size){
